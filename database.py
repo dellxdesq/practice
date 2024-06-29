@@ -2,10 +2,11 @@ import sqlite3
 
 class VideoTranscriptDB:
     def __init__(self, db_name="transcripts.db"):
+        self.db_name = db_name
         self.conn = sqlite3.connect(db_name)
-        self.create_tables()
+        self._create_tables()
 
-    def create_tables(self):
+    def _create_tables(self):
         with self.conn:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS videos (
@@ -45,9 +46,12 @@ class VideoTranscriptDB:
         cursor.execute("SELECT start_time, text FROM segments WHERE video_id = ?", (video_id,))
         return cursor.fetchall()
 
-class VideoTranscriptQuery:
+    def __del__(self):
+        self.conn.close()
+
+class VideoTranscriptQuery(VideoTranscriptDB):
     def __init__(self, db_name="transcripts.db"):
-        self.conn = sqlite3.connect(db_name)
+        super().__init__(db_name)
 
     def get_segments_by_url(self, url):
         cursor = self.conn.cursor()
@@ -55,7 +59,6 @@ class VideoTranscriptQuery:
         result = cursor.fetchone()
         if result:
             video_id = result[0]
-            cursor.execute("SELECT start_time, text FROM segments WHERE video_id = ?", (video_id,))
-            return cursor.fetchall()
+            return self.get_segments(video_id)
         else:
             return None
