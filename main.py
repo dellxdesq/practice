@@ -6,7 +6,7 @@ def main():
 
     db = VideoTranscriptDB()
     video_id = db.insert_video(video_url)
-
+##
     if video_id is None:
         print("Это видео уже есть в базе данных.")
         return
