@@ -59,6 +59,6 @@ class YouTubeTranscriptBot:
         self.application.run_polling()
 
 if __name__ == "__main__":
-    TOKEN = "6751020002:AAFABIoqzPaR2ezqBfuJbItO_pd2Y_dXG28"
+    TOKEN = ""
     bot = YouTubeTranscriptBot(TOKEN)
     bot.run()
