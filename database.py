@@ -1,12 +1,14 @@
 import sqlite3
+from sklearn.feature_extraction.text import CountVectorizer
+import numpy as np
+import faiss
 
 class VideoTranscriptDB:
     def __init__(self, db_name="transcripts.db"):
-        self.db_name = db_name
         self.conn = sqlite3.connect(db_name)
-        self._create_tables()
+        self.create_tables()
 
-    def _create_tables(self):
+    def create_tables(self):
         with self.conn:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS videos (
@@ -30,7 +32,7 @@ class VideoTranscriptDB:
             cursor.execute("SELECT id FROM videos WHERE url = ?", (url,))
             result = cursor.fetchone()
             if result:
-                return None  # URL already exists in the database
+                return None  # URL уже существует в базе данных
             cursor.execute("INSERT INTO videos (url) VALUES (?)", (url,))
             return cursor.lastrowid
 
@@ -46,12 +48,14 @@ class VideoTranscriptDB:
         cursor.execute("SELECT start_time, text FROM segments WHERE video_id = ?", (video_id,))
         return cursor.fetchall()
 
-    def __del__(self):
-        self.conn.close()
+    def get_all_segments(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT text FROM segments")
+        return [row[0] for row in cursor.fetchall()]
 
-class VideoTranscriptQuery(VideoTranscriptDB):
+class VideoTranscriptQuery:
     def __init__(self, db_name="transcripts.db"):
-        super().__init__(db_name)
+        self.conn = sqlite3.connect(db_name)
 
     def get_segments_by_url(self, url):
         cursor = self.conn.cursor()
@@ -59,6 +63,7 @@ class VideoTranscriptQuery(VideoTranscriptDB):
         result = cursor.fetchone()
         if result:
             video_id = result[0]
-            return self.get_segments(video_id)
+            cursor.execute("SELECT start_time, text FROM segments WHERE video_id = ?", (video_id,))
+            return cursor.fetchall()
         else:
             return None

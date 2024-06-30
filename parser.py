@@ -51,8 +51,8 @@ class TranscriptParser:
                     'text': temp_text.strip()
                 })
                 temp_text = ""
-                temp_start = entry['start'] + entry['duration']
-                temp_duration = 0.0
+                temp_start = entry['start']
+                temp_duration = entry['duration']
         if temp_text:
             merged_transcript.append({
                 'start': temp_start,
@@ -67,4 +67,3 @@ class TranscriptParser:
             return f"{minutes}м {seconds}с"
         else:
             return f"{seconds}с"
-
