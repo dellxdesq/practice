@@ -22,6 +22,7 @@ class VideoTranscriptDB:
                     video_id INTEGER,
                     start_time TEXT,
                     text TEXT,
+                    url TEXT,
                     FOREIGN KEY(video_id) REFERENCES videos(id)
                 )
             """)
@@ -36,12 +37,12 @@ class VideoTranscriptDB:
             cursor.execute("INSERT INTO videos (url) VALUES (?)", (url,))
             return cursor.lastrowid
 
-    def insert_segment(self, video_id, start_time, text):
+    def insert_segment(self, video_id, start_time, text, url):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO segments (video_id, start_time, text)
-                VALUES (?, ?, ?)
-            """, (video_id, start_time, text))
+                INSERT INTO segments (video_id, start_time, text, url)
+                VALUES (?, ?, ?, ?)
+            """, (video_id, start_time, text, url))
 
     def get_segments(self, video_id):
         cursor = self.conn.cursor()
