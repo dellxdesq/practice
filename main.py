@@ -64,6 +64,16 @@ class VideoTranscriptApp:
 
         return video_url
 
+    def generate_answer(self, query_text):
+        segments = self.db.get_all_segments()
+        self.vectorizer.build_index(segments)
+        distances, indices = self.vectorizer.search_similar(query_text, k=1)
+
+        closest_segment = segments[indices[0]]
+
+        response = self.ollama_model.generate_response(closest_segment, query_text)
+        return response
+
     def run(self):
         while True:
             choice = input(
@@ -79,7 +89,7 @@ class VideoTranscriptApp:
                 self.find_similar_segments(query_text)
             elif choice == '4':
                 query_text = input("Введите текст для поиска и генерации ответа: ")
-                response = self.ollama_model.generate_response(query_text)
+                response = self.generate_answer(query_text)
                 print(f"Ответ: {response}")
             elif choice == '5':
                 query_text = input("Введите текст для поиска видео: ")
@@ -90,7 +100,6 @@ class VideoTranscriptApp:
                     print("Подходящее видео не найдено.")
             else:
                 print("Неверный ввод. Попробуйте снова.")
-
 
 if __name__ == "__main__":
     app = VideoTranscriptApp()
