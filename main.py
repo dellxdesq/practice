@@ -45,24 +45,17 @@ class VideoTranscriptApp:
         print(f"Похожие сегменты на '{query_text}':")
         for dist, idx in zip(distances, indices):
             segment = segments[idx] if idx < len(segments) else "<Сегмент не найден>"
-            print(f"Расстояние: {dist}, Индекс сегмента: {idx}, Сегмент текста: {segment}")
+            cursor = self.db.conn.cursor()
+            cursor.execute("SELECT start_time, url FROM segments WHERE text = ?", (segment,))
+            result = cursor.fetchone()
+            if result:
+                start_time, url = result
+                print(
+                    f"Расстояние: {dist}, Индекс сегмента: {idx}, Сегмент текста: {segment}, Время начала: {start_time}, URL видео: {url}")
+            else:
+                print(f"Расстояние: {dist}, Индекс сегмента: {idx}, Сегмент текста: {segment}")
 
-    def find_closest_video(self, query_text):
-        segments = self.db.get_all_segments()
-        self.vectorizer.build_index(segments)
-        distances, indices = self.vectorizer.search_similar(query_text, k=1)
 
-        closest_segment_idx = indices[0]
-
-        cursor = self.db.conn.cursor()
-        cursor.execute("SELECT url FROM segments WHERE id = ?", (closest_segment_idx + 1,))
-        video_url_row = cursor.fetchone()
-        if not video_url_row:
-            print("URL видео для данного сегмента не найден.")
-            return None
-        video_url = video_url_row[0]
-
-        return video_url
 
     def generate_answer(self, query_text):
         segments = self.db.get_all_segments()
@@ -77,7 +70,7 @@ class VideoTranscriptApp:
     def run(self):
         while True:
             choice = input(
-                "Введите '1' для добавления видео, '2' для запроса сегментов, '3' для поиска по смыслу, '4' для генерации ответа, '5' для поиска видео: ")
+                "Введите '1' для добавления видео, '2' для запроса сегментов, '3' для поиска по смыслу, '4' для генерации ответа")
             if choice == '1':
                 video_url = input("Введите URL видео на YouTube: ")
                 self.add_video(video_url)
@@ -91,13 +84,6 @@ class VideoTranscriptApp:
                 query_text = input("Введите текст для поиска и генерации ответа: ")
                 response = self.generate_answer(query_text)
                 print(f"Ответ: {response}")
-            elif choice == '5':
-                query_text = input("Введите текст для поиска видео: ")
-                video_url = self.find_closest_video(query_text)
-                if video_url:
-                    print(f"Самое подходящее видео: {video_url}")
-                else:
-                    print("Подходящее видео не найдено.")
             else:
                 print("Неверный ввод. Попробуйте снова.")
 
