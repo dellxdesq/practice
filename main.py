@@ -40,9 +40,10 @@ class VideoTranscriptApp:
     def find_similar_segments(self, query_text):
         segments = self.db.get_all_segments()
         self.vectorizer.build_index(segments)
-        distances, indices = self.vectorizer.search_similar(query_text)
+        distances, indices = self.vectorizer.search_similar(query_text, k=5)  # Ищем 5 ближайших сегментов
 
         print(f"Похожие сегменты на '{query_text}':")
+        similar_segments = []
         for dist, idx in zip(distances, indices):
             segment = segments[idx] if idx < len(segments) else "<Сегмент не найден>"
             cursor = self.db.conn.cursor()
@@ -50,10 +51,14 @@ class VideoTranscriptApp:
             result = cursor.fetchone()
             if result:
                 start_time, url = result
-                print(
-                    f"Расстояние: {dist}, Индекс сегмента: {idx}, Сегмент текста: {segment}, Время начала: {start_time}, URL видео: {url}")
-            else:
-                print(f"Расстояние: {dist}, Индекс сегмента: {idx}, Сегмент текста: {segment}")
+                similar_segments.append((segment, start_time, url))
+
+        self.generate_answers_for_segments(similar_segments, query_text)
+
+    def generate_answers_for_segments(self, similar_segments, query_text):
+        for segment, start_time, url in similar_segments:
+            response = self.ollama_model.generate_answer_from_segment(segment, query_text)
+            print(f"URL: {url}\nВремя начала: {start_time}\nОтвет: {response}\n")
 
 
 
