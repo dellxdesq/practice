@@ -6,6 +6,11 @@ class TranscriptParser:
     def __init__(self):
         pass
 
+    '''Извлекает идентификатор видео из URL.
+Разбирает URL и извлекает параметры запроса.
+Если параметр 'v' присутствует, возвращает его значение.
+Если нет, использует регулярное выражение для поиска идентификатора видео в URL.
+Если идентификатор не найден, выбрасывает исключение ValueError.'''
     def get_video_id(self, url):
         query = urlparse(url).query
         params = parse_qs(query)
@@ -19,6 +24,14 @@ class TranscriptParser:
             else:
                 raise ValueError("Не удалось извлечь идентификатор видео из URL")
 
+    '''Извлекает субтитры для заданного URL видео.
+Извлекает идентификатор видео с помощью метода get_video_id.
+Пытается получить субтитры на русском языке, используя YouTubeTranscriptApi.get_transcript.
+Обрабатывает различные исключения:
+TranscriptsDisabled: Субтитры отключены для данного видео.
+NoTranscriptFound: Субтитры на русском языке не найдены.
+VideoUnavailable: Видео недоступно.
+Exception: Обрабатывает любые другие ошибки.'''
     def get_transcript(self, video_url):
         video_id = self.get_video_id(video_url)
         try:
@@ -34,6 +47,12 @@ class TranscriptParser:
         except Exception as e:
             print(f"Произошла ошибка: {str(e)}")
 
+    '''Объединяет сегменты субтитров в более крупные блоки, ограниченные по времени (max_duration).
+Если субтитры отсутствуют, возвращает пустой список.
+Инициализирует временные переменные для накопления текста, времени начала и длительности.
+Проходит по каждому сегменту субтитров, добавляя текст и длительность к временным переменным.
+Когда суммарная длительность превышает max_duration, создает новый объединенный сегмент и сбрасывает временные переменные.
+Возвращает список объединенных сегментов.'''
     def merge_transcripts(self, transcript, max_duration=60.0):
         if not transcript:
             return []
@@ -60,6 +79,9 @@ class TranscriptParser:
             })
         return merged_transcript
 
+    '''Форматирует время в секундах в удобочитаемую строку.
+Преобразует секунды в минуты и оставшиеся секунды.
+Возвращает строку в формате "Xm Ys" или "Ys", если минут нет.'''
     def format_time(self, seconds):
         minutes = int(seconds // 60)
         seconds = int(seconds % 60)

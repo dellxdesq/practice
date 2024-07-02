@@ -1,5 +1,6 @@
-from database import VideoTranscriptDB, VideoTranscriptQuery
-from parser import TranscriptParser
+from database.video_transcript_db import VideoTranscriptDB
+from database.video_transcript_query import VideoTranscriptQuery
+from transcript_parser import TranscriptParser
 from multilingual_vectorizer import MultilingualVectorizer
 from ollama_model import OllamaModel
 
@@ -11,6 +12,12 @@ class VideoTranscriptApp:
         self.vectorizer = MultilingualVectorizer("intfloat/multilingual-e5-base")
         self.ollama_model = OllamaModel()
 
+    '''Получает расшифровку текста из видео по заданному URL.
+Проверяет, доступна ли расшифровка на русском языке.
+Вставляет URL видео в базу данных.
+Если видео уже есть в базе данных, функция завершается.
+Объединяет сегменты расшифровки, чтобы избежать слишком коротких отрезков.
+Вставляет сегменты в базу данных с указанием времени начала и текста.'''
     def add_video(self, video_url):
         transcript = self.parser.get_transcript(video_url)
         if not transcript:
@@ -29,6 +36,8 @@ class VideoTranscriptApp:
             self.db.insert_segment(video_id, start_time, text, video_url)
             print(f"{start_time}: {text}")
 
+    '''Получает и выводит сегменты расшифровки текста для заданного URL видео из базы данных.
+Если видео не найдено, выводится соответствующее сообщение.'''
     def query_segments(self, video_url):
         segments = self.query.get_segments_by_url(video_url)
         if segments:
@@ -37,10 +46,15 @@ class VideoTranscriptApp:
         else:
             print("Видео не найдено в базе данных.")
 
+    '''Получает все сегменты из базы данных.
+Создает векторный индекс для поиска похожих сегментов.
+Ищет похожие сегменты на основе заданного текста.
+Выводит похожие сегменты и их временные метки.
+Генерирует ответы на основе найденных похожих сегментов.'''
     def find_similar_segments(self, query_text):
         segments = self.db.get_all_segments()
         self.vectorizer.build_index(segments)
-        distances, indices = self.vectorizer.search_similar(query_text, k=5)  # Ищем 5 ближайших сегментов
+        distances, indices = self.vectorizer.search_similar(query_text, k=5)
 
         print(f"Похожие сегменты на '{query_text}':")
         similar_segments = []
@@ -55,13 +69,18 @@ class VideoTranscriptApp:
 
         self.generate_answers_for_segments(similar_segments, query_text)
 
+    '''Генерирует ответы на основе каждого найденного похожего сегмента и заданного текста.
+Выводит URL, время начала сегмента и сгенерированный ответ.'''
     def generate_answers_for_segments(self, similar_segments, query_text):
         for segment, start_time, url in similar_segments:
             response = self.ollama_model.generate_answer_from_segment(segment, query_text)
-            print(f"URL: {url}\nВремя начала: {start_time}\nОтвет: {response}\n")
+            print(f"По ссылке из видео: {url}\nНа таймкоде: {start_time}\nСодержится такая информация: {response}\n")
 
-
-
+    '''Получает все сегменты из базы данных.
+Создает векторный индекс для поиска похожих сегментов.
+Ищет самый похожий сегмент на основе заданного текста.
+Генерирует ответ на основе самого похожего сегмента и заданного текста.
+Возвращает сгенерированный ответ.'''
     def generate_answer(self, query_text):
         segments = self.db.get_all_segments()
         self.vectorizer.build_index(segments)
@@ -75,18 +94,20 @@ class VideoTranscriptApp:
     def run(self):
         while True:
             choice = input(
-                "Введите '1' для добавления видео, '2' для запроса сегментов, '3' для поиска по смыслу, '4' для генерации ответа")
+                "Введите '1' для добавления видео, '2' для запроса сегментов, '3' для поиска по смыслу, '4' для генерации ответа: ")
             if choice == '1':
+                #Убрать вывод добавленных сегментов, написать, что видео добавлено
                 video_url = input("Введите URL видео на YouTube: ")
                 self.add_video(video_url)
             elif choice == '2':
+                #Ненужная функция, чисто для тестов
                 video_url = input("Введите URL видео для запроса сегментов: ")
                 self.query_segments(video_url)
             elif choice == '3':
-                query_text = input("Введите текст для поиска схожих сегментов: ")
+                query_text = input("Введите текст для поиска видео: ")
                 self.find_similar_segments(query_text)
             elif choice == '4':
-                query_text = input("Введите текст для поиска и генерации ответа: ")
+                query_text = input("Введите ваш вопрос: ")
                 response = self.generate_answer(query_text)
                 print(f"Ответ: {response}")
             else:
