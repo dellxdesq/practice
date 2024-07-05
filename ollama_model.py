@@ -46,3 +46,19 @@ class OllamaModel:
         ])
         answer = response['message']['content']
         return answer
+
+    def summarize_segment(self, segment_text):
+        message = f"""
+        Напиши краткое содержание данного сегмента на русском языке:
+        Ты должен опираться только на информацию, которая дана в сегменте, не надо придумывать что то от себя,
+        также предложение не должно начинаться со слов содержание или краткое содержание, в твоем ответе это просто описание того, что написано всегменте.
+        Сегмент: {segment_text}
+        """
+        response = ollama.chat(model=self.model_name, messages=[
+            {
+                'role': 'user',
+                'content': message,
+            },
+        ])
+        summary = response['message']['content'].strip()
+        return summary

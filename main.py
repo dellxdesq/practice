@@ -60,6 +60,11 @@ class VideoTranscriptApp:
         print(f"Похожие сегменты на '{query_text}':")
 
         similar_segments = []
+
+        # Выбор модели Ollama
+        model_name = self.choose_ollama_model()
+        ollama_model = OllamaModel(model_name)
+
         for dist, idx in zip(distances, indices):
             segment = segments[idx] if idx < len(segments) else "<Сегмент не найден>"
             cursor = self.db.conn.cursor()
@@ -69,8 +74,19 @@ class VideoTranscriptApp:
                 start_time, url = result
                 similar_segments.append((segment, start_time, url))
 
+        # Вывод промежуточной строки со всеми изначальными сегментами
+        print("Промежуточные сегменты:")
         for segment, start_time, url in similar_segments:
-            print(f"По вашему запросу было найдено: {url} на таймкоде {start_time} с сегментом '{segment}'")
+            print(f"{url} на таймкоде {start_time} с сегментом '{segment}'")
+
+        # Генерация краткого содержания для каждого сегмента
+        summarized_segments = []
+        for segment, start_time, url in similar_segments:
+            summary = ollama_model.summarize_segment(segment)
+            summarized_segments.append((summary, start_time, url))
+
+        for summary, start_time, url in summarized_segments:
+            print(f"По вашему запросу было найдено: {url} на таймкоде {start_time} с кратким содержанием '{summary}'")
 
     def generate_answer(self, query_text):
         segments = self.db.get_all_segments()
