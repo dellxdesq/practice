@@ -10,32 +10,14 @@ class VideoTranscriptApp:
         self.parser = TranscriptParser()
         self.vectorizer = MultilingualVectorizer("intfloat/multilingual-e5-base")
 
-    def add_video(self, video_url):
+    def add_video(self, video_url, max_duration):
         transcript = self.parser.get_transcript(video_url)
         if not transcript:
-            print("Расшифровка недоступна.")
-            return
+            return "Расшифровка недоступна."
 
         video_id = self.db.insert_video(video_url)
         if video_id is None:
-            print("Это видео уже добавлено.")
-            return
-
-        print("Выберите максимальную длительность объединения (в секундах):")
-        print("1. 5 секунд")
-        print("2. 15 секунд")
-        print("3. 30 секунд")
-        choice = input("Введите номер выбора: ")
-
-        if choice == '1':
-            max_duration = 5.0
-        elif choice == '2':
-            max_duration = 15.0
-        elif choice == '3':
-            max_duration = 30.0
-        else:
-            print("Неверный выбор. Используется значение по умолчанию: 60 секунд.")
-            max_duration = 60.0
+            return "Это видео уже добавлено."
 
         merged_transcript = self.parser.merge_transcripts(transcript, max_duration=max_duration)
         for entry in merged_transcript:
@@ -43,6 +25,7 @@ class VideoTranscriptApp:
             text = entry['text']
             self.db.insert_segment(video_id, start_time, text, video_url)
             print(f"{start_time}: {text}")
+        return "Видео добавлено успешно!"
 
     def query_segments(self, video_url):
         segments = self.query.get_segments_by_url(video_url)
@@ -52,7 +35,7 @@ class VideoTranscriptApp:
         else:
             print("Видео не найдено в базе данных.")
 
-    def find_similar_segments(self, query_text):
+    def find_similar_segments(self, query_text, model_name):
         segments = self.db.get_all_segments()
         self.vectorizer.build_index(segments)
         distances, indices = self.vectorizer.search_similar(query_text, k=5)  # Ищем 5 ближайших сегментов
@@ -61,8 +44,6 @@ class VideoTranscriptApp:
 
         similar_segments = []
 
-        # Выбор модели Ollama
-        model_name = self.choose_ollama_model()
         ollama_model = OllamaModel(model_name)
 
         for dist, idx in zip(distances, indices):
@@ -85,10 +66,9 @@ class VideoTranscriptApp:
             summary = ollama_model.summarize_segment(segment)
             summarized_segments.append((summary, start_time, url))
 
-        for summary, start_time, url in summarized_segments:
-            print(f"По вашему запросу было найдено: {url} на таймкоде {start_time} с кратким содержанием '{summary}'")
+        return summarized_segments
 
-    def generate_answer(self, query_text):
+    def generate_answer(self, query_text, model_name):
         segments = self.db.get_all_segments()
         self.vectorizer.build_index(segments)
         distances, indices = self.vectorizer.search_similar(query_text, k=5)
@@ -97,14 +77,13 @@ class VideoTranscriptApp:
         for el in closest_segments:
             print(el)
         # Выбор модели Ollama
-        model_name = self.choose_ollama_model()
         ollama_model = OllamaModel(model_name)
 
         # Ранжирование сегментов по полезности
         ranked_segment = ollama_model.rank_segments(closest_segments, query_text)
 
         cursor = self.db.conn.cursor()
-        cursor.execute("SELECT start_time, url FROM segments WHERE text = ?", (ranked_segment,))
+        cursor.execute("SELECT start_time, url FROM segments WHERE text =?", (ranked_segment,))
         result = cursor.fetchone()
         if result:
             start_time, url = result

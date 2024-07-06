@@ -26,6 +26,13 @@ class VideoTranscriptDB:
                     FOREIGN KEY(video_id) REFERENCES videos(id)
                 )
             """)
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS tg_user (
+                    id INTEGER PRIMARY KEY,
+                    token TEXT NOT NULL,
+                    first_visit_date DATE
+                )
+            """)
 
     def insert_video(self, url):
         with self.conn:
