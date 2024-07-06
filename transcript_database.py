@@ -2,7 +2,7 @@ import sqlite3
 from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
 import faiss
-
+import datetime
 class VideoTranscriptDB:
     def __init__(self, db_name="transcripts.db"):
         self.conn = sqlite3.connect(db_name)
@@ -19,7 +19,7 @@ class VideoTranscriptDB:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS segments (
                     id INTEGER PRIMARY KEY,
-                    video_id INTEGER,
+                    video_id INTEGER PRIMARY KEY,
                     start_time TEXT,
                     text TEXT,
                     url TEXT,
@@ -29,8 +29,17 @@ class VideoTranscriptDB:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS tg_user (
                     id INTEGER PRIMARY KEY,
-                    token TEXT NOT NULL,
-                    first_visit_date DATE
+                    user_id INTEGER NOT NULL,
+                    url TEXT NOT NULL,
+                    date_publication DATE
+                )
+            """)
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS favorites (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    video_url TEXT NOT NULL,
+                    FOREIGN KEY(user_id) REFERENCES tg_user(id)
                 )
             """)
 
@@ -61,6 +70,38 @@ class VideoTranscriptDB:
         cursor.execute("SELECT text FROM segments")
         return [row[0] for row in cursor.fetchall()]
 
+    def insert_tg_user(self, user_id, url, date_publication):
+        try:
+            with self.conn:
+                self.conn.execute("""
+                    INSERT INTO tg_user (user_id, url, date_publication)
+                    VALUES (?,?,?)
+                """, (user_id, url, date_publication))
+                self.conn.commit()  # <--- Add this line
+            print("Данные о пользователе успешно добавлены в таблицу tg_user.")
+        except Exception as e:
+            print(f"Ошибка при добавлении данных в таблицу tg_user: {str(e)}")
+
+    def add_favorite(self, user_id, video_url):
+        with self.conn:
+            self.conn.execute("""
+                INSERT INTO favorites (user_id, video_url)
+                VALUES (?, ?)
+            """, (user_id, video_url))
+            self.conn.commit()
+
+    def get_favorites(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT video_url FROM favorites WHERE user_id = ?", (user_id,))
+        return [row[0] for row in cursor.fetchall()]
+
+    def remove_favorite(self, user_id, video_url):
+        with self.conn:
+            self.conn.execute("""
+                DELETE FROM favorites
+                WHERE user_id = ? AND video_url = ?
+            """, (user_id, video_url))
+            self.conn.commit()
 class VideoTranscriptQuery:
     def __init__(self, db_name="transcripts.db"):
         self.conn = sqlite3.connect(db_name)

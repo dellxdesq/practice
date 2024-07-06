@@ -13,6 +13,7 @@ class Keyboard:
                 KeyboardButton(text="Поиск по теме")
             ],
             [
+                KeyboardButton(text="Добавить в избранное"),
                 KeyboardButton(text="Загрузить новое видео")
             ]
 

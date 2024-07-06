@@ -4,13 +4,17 @@ import logging
 from datetime import datetime
 from keyboard import Keyboard
 from aiogram import Bot, Dispatcher, types
+
 from aiogram.filters.command import Command
 from aiogram import F
 from aiogram.types import ReplyKeyboardMarkup
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from transcript_app import VideoTranscriptApp
-
+from transcript_database import VideoTranscriptDB
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token="6751020002:AAFABIoqzPaR2ezqBfuJbItO_pd2Y_dXG28")
 dp = Dispatcher()
@@ -28,6 +32,7 @@ class YourStates(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_quest = State()
     waiting_for_model = State()
+    waiting_for_favorite_url = State()
 
 
 @dp.message(Command("start"))
@@ -61,6 +66,12 @@ async def handle_duration(message: types.Message, state: FSMContext):
     data = await state.get_data()
     link = data.get("link")
 
+    db = VideoTranscriptDB()
+    user_id = message.from_user.id
+    current_date = datetime.now()  # сохраняем дату и время загрузки
+
+    # Insert data into database first
+    db.insert_tg_user(user_id, link, current_date)
     if choice == '1':
         max_duration = 5.0
     elif choice == '2':
@@ -89,35 +100,77 @@ async def handle_duration(message: types.Message, state: FSMContext):
 @dp.message(F.text.lower() == "история")
 async def get_hist(message: types.Message):
     id = message.from_user.id
-    time = datetime.now()
     try:
         loading = await message.reply("Загружаем ваши видео...")
-        #получаем из бд по id видео, добавленные пользователем
-        #выводим ответ
+        db = VideoTranscriptDB()
+        cursor = db.conn.cursor()
+        cursor.execute("SELECT url FROM tg_user WHERE user_id = ?", (id,))
+        videos = cursor.fetchall()
+        video_links = [row[0] for row in videos]
+        if video_links:
+            video_list = "\n".join(video_links)
+            await message.reply(f"Ваша история видео:\n{video_list}")
+        else:
+            await message.reply("У вас нет добавленных видео.")
         await loading.delete()
-    except Exception:
-        await message.reply("Ошибка при обращении к базе данных. Попробуйте позже...")
+    except Exception as e:
+        await message.reply(f"Ошибка при обращении к базе данных: {str(e)}. Попробуйте позже...")
     await main_menu(message)
 
+
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+import hashlib
 
 @dp.message(F.text.lower() == "избранное")
 async def get_fav(message: types.Message):
     id = message.from_user.id
-    time = datetime.datetime.now()
     try:
         loading = await message.reply("Загружаем ваши видео...")
-        # получаем из бд по id видео, добавленные пользователем
-        # выводим ответ
+        db = VideoTranscriptDB()
+        favorites = db.get_favorites(id)
+        if favorites:
+            # Формируем список избранных видео
+            favorite_list = "\n".join(f"• {url}" for url in favorites)
+            await message.reply(f"Ваши избранные видео:\n\n{favorite_list}")
+        else:
+            await message.reply("У вас нет избранных видео.")
         await loading.delete()
-    except Exception:
-        await message.reply("Ошибка при обращении к базе данных. Попробуйте позже...")
+    except Exception as e:
+        await message.reply(f"Ошибка при обращении к базе данных: {str(e)}")
     await main_menu(message)
 
 
-@dp.message(F.text.lower() == "задать вопрос")
-async def find_for_quest(message: types.Message, state: FSMContext):
-    await message.reply("Выберите модель для обработки вопроса:", reply_markup=Keyboard().model_kb)
-    await state.set_state(YourStates.waiting_for_model)
+@dp.message(F.text.startswith("Добавить в избранное"))
+async def add_to_favorites(message: types.Message):
+    id = message.from_user.id
+    text_parts = message.text.split(" ", 3)
+    if len(text_parts) < 4:
+        await message.reply("Пожалуйста, укажите URL видео после 'Добавить в избранное'.")
+        return
+
+    video_url = text_parts[-1]
+    if not video_url.startswith("http"):
+        await message.reply("Пожалуйста, укажите корректный URL видео.")
+        return
+
+    try:
+        db = VideoTranscriptDB()
+        db.add_favorite(id, video_url)
+        await message.reply(f"Видео {video_url} добавлено в избранное.")
+    except Exception as e:
+        await message.reply(f"Ошибка при добавлении в избранное: {str(e)}")
+    await main_menu(message)
+
+@dp.callback_query(lambda c: c.data and c.data.startswith('del_fav:'))
+async def process_delete_favorite(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    video_url = callback_query.data.split(':', 1)[1]
+    db = VideoTranscriptDB()
+    db.remove_favorite(user_id, video_url)
+    await callback_query.answer(f"Видео {video_url} удалено из избранного")
+    await callback_query.message.edit_reply_markup(reply_markup=None)
+    await get_fav(callback_query.message)
+
 
 @dp.message(YourStates.waiting_for_model)
 async def process_model_choice(message: types.Message, state: FSMContext):
