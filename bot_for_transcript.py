@@ -18,7 +18,7 @@ from transcript_database import VideoTranscriptDB
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token="6751020002:AAFABIoqzPaR2ezqBfuJbItO_pd2Y_dXG28")
 dp = Dispatcher()
-admins_id = {963171423}
+admins_id = {912313123}
 class YourStates(StatesGroup):
     waiting_for_link = State()
     waiting_for_duration = State()
@@ -32,8 +32,9 @@ class YourStates(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_quest = State()
     waiting_for_model = State()
+    waiting_for_model2 = State()
     waiting_for_favorite_url = State()
-    waiting_for_time_nu = State()
+    waiting_for_favorite = State()
 
 
 @dp.message(Command("start"))
@@ -142,24 +143,25 @@ async def get_fav(message: types.Message):
 
 
 @dp.message(F.text.startswith("Добавить в избранное"))
-async def add_to_favorites(message: types.Message):
-    id = message.from_user.id
-    text_parts = message.text.split(" ", 3)
-    if len(text_parts) < 4:
-        await message.reply("Пожалуйста, укажите URL видео после 'Добавить в избранное'.")
-        return
+async def add_to_favorites(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    await message.reply("Отправьте ссылку на видео, которое хотите добавить в избранное:")
+    await state.set_state(YourStates.waiting_for_favorite)
 
-    video_url = text_parts[-1]
-    if not video_url.startswith("http"):
+@dp.message(YourStates.waiting_for_favorite)
+async def handle_favorite(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    video_url = message.text
+    if video_url.startswith("http"):
+        try:
+            db = VideoTranscriptDB()
+            db.add_favorite(user_id, video_url)
+            await message.reply(f"Видео {video_url} добавлено в избранное.")
+        except Exception as e:
+            await message.reply(f"Ошибка при добавлении в избранное: {str(e)}")
+    else:
         await message.reply("Пожалуйста, укажите корректный URL видео.")
-        return
-
-    try:
-        db = VideoTranscriptDB()
-        db.add_favorite(id, video_url)
-        await message.reply(f"Видео {video_url} добавлено в избранное.")
-    except Exception as e:
-        await message.reply(f"Ошибка при добавлении в избранное: {str(e)}")
+    await state.clear()
     await main_menu(message)
 
 @dp.callback_query(lambda c: c.data and c.data.startswith('del_fav:'))
@@ -172,7 +174,10 @@ async def process_delete_favorite(callback_query: types.CallbackQuery):
     await callback_query.message.edit_reply_markup(reply_markup=None)
     await get_fav(callback_query.message)
 
-
+@dp.message(F.text.lower() == "задать вопрос")
+async def find_for_quest(message: types.Message, state: FSMContext):
+    await message.reply("Выберите модель для обработки вопроса:", reply_markup=Keyboard().model_kb)
+    await state.set_state(YourStates.waiting_for_model)
 @dp.message(YourStates.waiting_for_model)
 async def process_model_choice(message: types.Message, state: FSMContext):
     model_name = message.text
@@ -196,12 +201,17 @@ async def find_quest_m1(message: types.Message, state: FSMContext):
     await state.clear()
     await main_menu(message)
 
+async def update_loading_message(message, dots):
+    new_text = f"Ищем ответ на вопрос{dots}"
+    if message.text != new_text:
+        await message.edit_text(new_text)
+
 @dp.message(F.text.lower() == "поиск по теме")
 async def find_for_theme(message: types.Message, state: FSMContext):
     await message.reply("Выберите языковую модель Ollama:", reply_markup=Keyboard().model_kb)
-    await state.set_state(YourStates.waiting_for_model)
+    await state.set_state(YourStates.waiting_for_model2)
 
-@dp.message(YourStates.waiting_for_model)
+@dp.message(YourStates.waiting_for_model2)
 async def process_model_choice(message: types.Message, state: FSMContext):
     model_name = message.text
     await message.reply("Введите тему для поиска ресурсов:")

@@ -19,7 +19,7 @@ class VideoTranscriptDB:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS segments (
                     id INTEGER PRIMARY KEY,
-                    video_id INTEGER PRIMARY KEY,
+                    video_id INTEGER,
                     start_time TEXT,
                     text TEXT,
                     url TEXT,
