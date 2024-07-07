@@ -18,7 +18,8 @@ from transcript_database import VideoTranscriptDB
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token="6751020002:AAFABIoqzPaR2ezqBfuJbItO_pd2Y_dXG28")
 dp = Dispatcher()
-admins_id = {912313123}
+#963171423
+admins_id = {963171423}
 class YourStates(StatesGroup):
     waiting_for_link = State()
     waiting_for_duration = State()
@@ -39,8 +40,14 @@ class YourStates(StatesGroup):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    user_id = message.from_user.id
+    db = VideoTranscriptDB()
+    if not db.user_exists(user_id):
+        db.insert_user_tokens(user_id, 5)
     await message.answer(
-        "Привет ✌️\nВы попали к боту, организующему удобный поиск по указанным вами видео. \nЧтобы начать, выберите одну из функций на кнопках")
+        f"Привет ✌️\nВы попали к боту, организующему удобный поиск по указанным вами видео.\n"
+        f"У вас имеется 10 токенов, за использование функции тратится 1 токен.\n"
+        f"\nЧтобы начать, выберите одну из функций на кнопках: ")
     await main_menu(message)
 
 
@@ -73,7 +80,23 @@ async def handle_duration(message: types.Message, state: FSMContext):
     current_date = datetime.now()  # сохраняем дату и время загрузки
 
     # Insert data into database first
-    db.insert_tg_user(user_id, link, current_date)
+
+    user_tokens = db.get_user_tokens(user_id)
+    if user_tokens <= 0:
+        await message.reply("У вас недостаточно токенов для использования этой функции.")
+        await state.clear()
+        await main_menu(message)
+        return
+
+    if not user_tokens <= 0:
+        db.insert_tg_user(user_id, link, current_date)
+    await message.reply(f"У вас осталось {user_tokens - 1} токенов.")
+    if not db.decrease_user_tokens(user_id):
+        await message.reply("Не удалось уменьшить количество токенов.")
+        await state.clear()
+        await main_menu(message)
+        return
+
     if choice == '1':
         max_duration = 5.0
     elif choice == '2':
@@ -100,8 +123,23 @@ async def handle_duration(message: types.Message, state: FSMContext):
 
 
 @dp.message(F.text.lower() == "история")
-async def get_hist(message: types.Message):
+async def get_hist(message: types.Message, state: FSMContext):
     id = message.from_user.id
+
+    db = VideoTranscriptDB()
+
+    user_tokens = db.get_user_tokens(id)
+    if user_tokens <= 0:
+        await message.reply("У вас недостаточно токенов для использования этой функции.")
+        await state.clear()
+        await main_menu(message)
+        return
+    await message.reply(f"У вас осталось {user_tokens - 1} токенов.")
+    if not db.decrease_user_tokens(id):
+        await message.reply("Не удалось уменьшить количество токенов.")
+        await state.clear()
+        await main_menu(message)
+        return
     try:
         loading = await message.reply("Загружаем ваши видео...")
         db = VideoTranscriptDB()
@@ -124,11 +162,24 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 import hashlib
 
 @dp.message(F.text.lower() == "избранное")
-async def get_fav(message: types.Message):
+async def get_fav(message: types.Message, state: FSMContext):
     id = message.from_user.id
+    db = VideoTranscriptDB()
+    user_tokens = db.get_user_tokens(id)
+    if user_tokens <= 0:
+        await message.reply("У вас недостаточно токенов для использования этой функции.")
+        await state.clear()
+        await main_menu(message)
+        return
+    await message.reply(f"У вас осталось {user_tokens - 1} токенов.")
+    if not db.decrease_user_tokens(id):
+        await message.reply("Не удалось уменьшить количество токенов.")
+        await state.clear()
+        await main_menu(message)
+        return
     try:
         loading = await message.reply("Загружаем ваши видео...")
-        db = VideoTranscriptDB()
+
         favorites = db.get_favorites(id)
         if favorites:
             # Формируем список избранных видео
@@ -152,6 +203,23 @@ async def add_to_favorites(message: types.Message, state: FSMContext):
 async def handle_favorite(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     video_url = message.text
+
+    db = VideoTranscriptDB()
+
+    # Check if user has tokens
+    user_tokens = db.get_user_tokens(user_id)
+    if user_tokens <= 0:
+        await message.reply("У вас недостаточно токенов для использования этой функции.")
+        await state.clear()
+        await main_menu(message)
+        return
+    await message.reply(f"У вас осталось {user_tokens - 1} токенов.")
+    # Decrease user tokens
+    if not db.decrease_user_tokens(user_id):
+        await message.reply("Не удалось уменьшить количество токенов.")
+        await state.clear()
+        await main_menu(message)
+        return
     if video_url.startswith("http"):
         try:
             db = VideoTranscriptDB()
@@ -176,6 +244,20 @@ async def process_delete_favorite(callback_query: types.CallbackQuery):
 
 @dp.message(F.text.lower() == "задать вопрос")
 async def find_for_quest(message: types.Message, state: FSMContext):
+    db = VideoTranscriptDB()
+    user_id = message.from_user.id
+    user_tokens = db.get_user_tokens(user_id)
+    if user_tokens <= 0:
+        await message.reply("У вас недостаточно токенов для использования этой функции.")
+        await state.clear()
+        await main_menu(message)
+        return
+    await message.reply(f"У вас осталось {user_tokens - 1} токенов.")
+    if not db.decrease_user_tokens(user_id):
+        await message.reply("Не удалось уменьшить количество токенов.")
+        await state.clear()
+        await main_menu(message)
+        return
     await message.reply("Выберите модель для обработки вопроса:", reply_markup=Keyboard().model_kb)
     await state.set_state(YourStates.waiting_for_model)
 @dp.message(YourStates.waiting_for_model)
@@ -208,13 +290,30 @@ async def update_loading_message(message, dots):
 
 @dp.message(F.text.lower() == "поиск по теме")
 async def find_for_theme(message: types.Message, state: FSMContext):
+
+    db = VideoTranscriptDB()
+    user_id = message.from_user.id
+
+    user_tokens = db.get_user_tokens(user_id)
+    if user_tokens <= 0:
+        await message.reply("У вас недостаточно токенов для использования этой функции.")
+        await state.clear()
+        await main_menu(message)
+        return
+    await message.reply(f"У вас осталось {user_tokens - 1} токенов.")
+    if not db.decrease_user_tokens(user_id):
+        await message.reply("Не удалось уменьшить количество токенов.")
+        await state.clear()
+        await main_menu(message)
+        return
+
     await message.reply("Выберите языковую модель Ollama:", reply_markup=Keyboard().model_kb)
     await state.set_state(YourStates.waiting_for_model2)
 
 @dp.message(YourStates.waiting_for_model2)
 async def process_model_choice(message: types.Message, state: FSMContext):
     model_name = message.text
-    await message.reply("Введите тему для поиска ресурсов:")
+    await message.reply("Введите тему для поиска видео:")
     await state.update_data(model_name=model_name)
     await state.set_state(YourStates.waiting_for_theme_m1)
 

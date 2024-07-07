@@ -2,7 +2,7 @@ import sqlite3
 from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
 import faiss
-import datetime
+from datetime import datetime, timedelta
 class VideoTranscriptDB:
     def __init__(self, db_name="transcripts.db"):
         self.conn = sqlite3.connect(db_name)
@@ -113,15 +113,16 @@ class VideoTranscriptDB:
             self.conn.commit()
 
     def get_new_users_by_days(self, days):
-        today = datetime.date.today()
-        start_date = today - datetime.timedelta(days=days)
+        current_date = datetime.now()
+        start_date = current_date - timedelta(days=days)
 
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT user_id, date_publication 
+        cursor = self.conn.execute("""
+            SELECT user_id, MIN(date_publication) AS earliest_date
             FROM tg_user
-            WHERE date_publication BETWEEN ? AND ?
-        """, (start_date, today))
+            WHERE date_publication >= ?
+            GROUP BY user_id
+        """, (start_date,))
+
         return cursor.fetchall()
 
     def get_activities_by_date(self, date):
@@ -135,18 +136,49 @@ class VideoTranscriptDB:
         return cursor.fetchall()
 
     def add_tokens(self, user_id, token_count):
-        with self.conn:
-            self.conn.execute("""
-                INSERT INTO tokens (id_user, users_tokens)
-                VALUES (?, ?)
-            """, (user_id, token_count))
-            self.conn.commit()
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT users_tokens FROM tokens WHERE id_user = ?", (user_id,))
+        existing_tokens = cursor.fetchone()
+        if existing_tokens:
+            new_token_count = existing_tokens[0] + token_count
+            cursor.execute("UPDATE tokens SET users_tokens = ? WHERE id_user = ?", (new_token_count, user_id))
+        else:
+            cursor.execute("INSERT INTO tokens (id_user, users_tokens) VALUES (?, ?)", (user_id, token_count))
+        self.conn.commit()
 
     def get_user_tokens(self, user_id):
         cursor = self.conn.cursor()
         cursor.execute("SELECT users_tokens FROM tokens WHERE id_user = ?", (user_id,))
         result = cursor.fetchone()
         return result[0] if result else 0
+
+
+    def decrease_user_tokens(self, user_id):
+        cursor = self.conn.execute("SELECT users_tokens FROM tokens WHERE id_user = ?", (user_id,))
+        result = cursor.fetchone()
+        if result:
+            current_tokens = result[0]
+            if current_tokens > 0:
+                self.conn.execute("UPDATE tokens SET users_tokens = ? WHERE id_user = ?", (current_tokens - 1, user_id))
+                self.conn.commit()
+                return True
+            else:
+                return False
+        else:
+            return False
+
+    def insert_user_tokens(self, user_id, tokens):
+        try:
+            self.conn.execute("INSERT INTO tokens (id_user, users_tokens) VALUES (?, ?)", (user_id, tokens))
+            self.conn.commit()
+        except sqlite3.IntegrityError:
+            # User already exists, do nothing
+            pass
+
+    def user_exists(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT 1 FROM tokens WHERE id_user = ?", (user_id,))
+        return cursor.fetchone() is not None
 
 class VideoTranscriptQuery:
     def __init__(self, db_name="transcripts.db"):
