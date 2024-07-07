@@ -18,7 +18,7 @@ from transcript_database import VideoTranscriptDB
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token="6751020002:AAFABIoqzPaR2ezqBfuJbItO_pd2Y_dXG28")
 dp = Dispatcher()
-admins_id = {5795388409}
+admins_id = {963171423}
 class YourStates(StatesGroup):
     waiting_for_link = State()
     waiting_for_duration = State()
@@ -33,6 +33,7 @@ class YourStates(StatesGroup):
     waiting_for_quest = State()
     waiting_for_model = State()
     waiting_for_favorite_url = State()
+    waiting_for_time_nu = State()
 
 
 @dp.message(Command("start"))
@@ -241,17 +242,61 @@ async def get_new_users(message: types.Message, state: FSMContext):
     await state.set_state(YourStates.waiting_for_time_nu)
 
 
+@dp.message(F.text.isdigit(), YourStates.waiting_for_time_nu)
+async def get_new_users_by_days(message: types.Message, state: FSMContext):
+    days = int(message.text)
+    try:
+        db = VideoTranscriptDB()
+        new_users = db.get_new_users_by_days(days)
+
+        if new_users:
+            user_info = "\n".join(
+                f"ID: {user_id}, Дата регистрации: {date_publication}" for user_id, date_publication in new_users)
+            await message.reply(f"Новые пользователи за последние {days} дней:\n\n{user_info}")
+        else:
+            await message.reply("За указанный период новых пользователей нет.")
+
+        await state.clear()
+        await main_menu(message)
+    except Exception as e:
+        await message.reply(f"Ошибка при получении новых пользователей: {str(e)}")
+        await state.clear()
+        await main_menu(message)
+
+
 @dp.message(F.text.lower() == "назад", YourStates.control)
 async def back_to_user_menu(message: types.Message, state: FSMContext):
     await main_menu(message)
     await state.clear()
 
 
-@dp.message(F.text.lower() == "активность", YourStates.control)
-async def get_activities(message: types.Message, state: FSMContext):
-    await message.reply("Введите дату для просмотра активности в формате ДД.ММ.ГГГГ:",
+@dp.message(F.text.lower() == "активность")
+async def get_activities(message: types.Message):
+    await message.reply("Введите дату для просмотра активности в формате ГГГГ-ММ-ДД:",
                         reply_markup=types.ReplyKeyboardRemove())
-    await state.set_state(YourStates.waiting_for_time_act)
+
+
+@dp.message(lambda m: len(m.text.split("-")) == 3)
+async def get_activities_by_date(message: types.Message):
+    try:
+        date_str = message.text
+        date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        db = VideoTranscriptDB()
+        user_activities = db.get_activities_by_date(date)
+
+        if user_activities:
+            activity_info = "\n".join(
+                f"ID: {user_id}, Добавленные видео: {videos}" for user_id, videos in user_activities)
+            await message.reply(f"Активность за дату {date}:\n\n{activity_info}")
+        else:
+            await message.reply("За указанную дату активности нет.")
+
+        await main_menu(message)
+    except ValueError:
+        await message.reply("Пожалуйста, введите дату в формате ГГГГ-ММ-ДД.")
+    except Exception as e:
+        await message.reply(f"Ошибка при получении активности: {str(e)}")
+        await main_menu(message)
 
 
 @dp.message(F.text.lower() == "добавить токены", YourStates.control)
@@ -261,46 +306,21 @@ async def add_token(message: types.Message, state: FSMContext):
     await state.set_state(YourStates.waiting_for_user_id)
 
 
-@dp.message(YourStates.waiting_for_time_act)
+@dp.message(YourStates.waiting_for_user_id)
 async def add_token_db(message: types.Message, state: FSMContext):
     input = message.text.strip().split(" ")
-    id = int(input[0].strip())
-    t_count = int(input[1].strip())
+    user_id = int(input[0].strip())
+    token_count = int(input[1].strip())
     try:
-        loading = await message.reply("Добовляем токены...")
-        #метод для добавления токенов в бд
+        loading = await message.reply("Добавляем токены...")
+        db = VideoTranscriptDB()
+        db.add_tokens(user_id, token_count)
         await loading.delete()
-    except Exception:
-        await message.reply("Во время загрузки статистики произошла непредвиденная ошибка...")
+        await message.reply(f"Пользователю с ID {user_id} добавлено {token_count} токенов.")
+    except Exception as e:
+        await message.reply(f"Ошибка при добавлении токенов: {str(e)}")
     await state.set_state(YourStates.control)
-    await message.reply("Токены успешно добавлены", reply_markup=Keyboard().admin_panel)
-
-
-@dp.message(YourStates.waiting_for_time_act)
-async def time_for_act(message: types.Message, state: FSMContext):
-    input = str.split(message.text, ".", -1)
-    date = datetime(int(input[2]), int(input[1]), int(input[0]))
-    try:
-        loading = await message.reply("Загружаем статистику...")
-        #Тут получаем из бд активность по дате и отправляем админу ответ
-        await loading.delete()
-    except Exception:
-        await message.reply("Во время загрузки статистики произошла непредвиденная ошибка...")
-    await state.set_state(YourStates.control)
-    await message.reply("Главное меню администрации:", reply_markup=Keyboard().admin_panel)
-
-
-@dp.message(YourStates.waiting_for_time_nu)
-async def time_for_nu(message: types.Message, state: FSMContext):
-    days = int(message.text)
-    try:
-        loading = await message.reply("Загружаем статистику...")
-        #Тут получаем из бд активность по последним дням и отправляем админу ответ
-        await loading.delete()
-    except Exception:
-        await message.reply("Во время загрузки статистики произошла непредвиденная ошибка...")
-    await state.set_state(YourStates.control)
-    await message.reply("Главное меню администрации:", reply_markup=Keyboard().admin_panel)
+    await main_menu(message)
 
 
 async def main_menu(message: types.Message):

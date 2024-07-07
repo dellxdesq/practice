@@ -43,6 +43,15 @@ class VideoTranscriptDB:
                 )
             """)
 
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS tokens (
+                    id INTEGER PRIMARY KEY,
+                    id_user INTEGER NOT NULL,
+                    users_tokens INTEGER NOT NULL,
+                    FOREIGN KEY(id_user) REFERENCES tg_user(id)
+                )
+            """)
+
     def insert_video(self, url):
         with self.conn:
             cursor = self.conn.cursor()
@@ -102,6 +111,43 @@ class VideoTranscriptDB:
                 WHERE user_id = ? AND video_url = ?
             """, (user_id, video_url))
             self.conn.commit()
+
+    def get_new_users_by_days(self, days):
+        today = datetime.date.today()
+        start_date = today - datetime.timedelta(days=days)
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT user_id, date_publication 
+            FROM tg_user
+            WHERE date_publication BETWEEN ? AND ?
+        """, (start_date, today))
+        return cursor.fetchall()
+
+    def get_activities_by_date(self, date):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT user_id, GROUP_CONCAT(url) AS videos
+            FROM tg_user
+            WHERE date(date_publication) = ?
+            GROUP BY user_id
+        """, (date.strftime("%Y-%m-%d"),))
+        return cursor.fetchall()
+
+    def add_tokens(self, user_id, token_count):
+        with self.conn:
+            self.conn.execute("""
+                INSERT INTO tokens (id_user, users_tokens)
+                VALUES (?, ?)
+            """, (user_id, token_count))
+            self.conn.commit()
+
+    def get_user_tokens(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT users_tokens FROM tokens WHERE id_user = ?", (user_id,))
+        result = cursor.fetchone()
+        return result[0] if result else 0
+
 class VideoTranscriptQuery:
     def __init__(self, db_name="transcripts.db"):
         self.conn = sqlite3.connect(db_name)
